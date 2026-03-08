@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Автономная сборка готового образа Armbian для Orange Pi One:
 # скачивает образ, монтирует, в chroot ставит Python, Node, Go, ZeroClaw.
-# Результат: один .img — записал на флешку 16GB и загрузился, ничего не доставляешь.
+# Результат: один .img 24 GB — записал на флешку и загрузился, ничего не доставляешь.
 #
 # Запуск: на своей Linux-машине с sudo и сетью:
 #   Debian/Ubuntu:  sudo apt-get install -y xz-utils curl qemu-user-static
@@ -16,14 +16,16 @@
 # Опционально тулчейн (один или оба): Pico (RP2040) или Nano (AVR/Arduino Nano)
 #   PROVISION_PICO=1 ./build-image.sh
 #   PROVISION_NANO=1 ./build-image.sh
-# Размер кэша apt в chroot (по умолчанию 2 GB, если не хватает места):
-#   APT_CACHE_GB=3 ./build-image.sh
+# Итоговый образ 24 GB, кэш apt при сборке 4 GB (переопределить: IMAGE_SIZE_GB=24 APT_CACHE_GB=4)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 ROOTFS="${BUILD_DIR}/rootfs"
 OUTPUT_IMG="${SCRIPT_DIR}/orange-pi-one-ready.img"
+
+IMAGE_SIZE_GB="${IMAGE_SIZE_GB:-24}"
+APT_CACHE_GB="${APT_CACHE_GB:-4}"
 
 # Прямая ссылка на minimal (Ubuntu 24.04 Noble) для Orange Pi One
 ARMBIAN_IMAGE_URL="${ARMBIAN_IMAGE_URL:-https://archive.armbian.com/orangepione/archive/Armbian_25.11.1_Orangepione_noble_current_6.12.58_minimal.img.xz}"
@@ -40,7 +42,9 @@ require_cmd() {
     command -v "$c" &>/dev/null || { echo "Need: $c"; exit 1; }
   done
 }
-require_cmd curl xz mount umount losetup
+require_cmd curl xz mount umount losetup truncate resize2fs
+# growpart (cloud-guest-utils) или parted для расширения раздела
+command -v growpart &>/dev/null || command -v parted &>/dev/null || { echo "Need: growpart or parted"; exit 1; }
 if ! sudo -n true 2>/dev/null; then
   echo "Need sudo (mount/losetup/chroot). Run: sudo ./build-image.sh"
   exit 1
@@ -62,11 +66,18 @@ if [[ ! -f "${ARMBIAN_IMAGE_RAW}" ]]; then
 fi
 test -f "${ARMBIAN_IMAGE_RAW}"
 
+# --- 2b. Расширить образ до IMAGE_SIZE_GB и корневой раздел (больше места под установку) ---
+CURRENT_SIZE=$(stat -c%s "${ARMBIAN_IMAGE_RAW}" 2>/dev/null || stat -f%z "${ARMBIAN_IMAGE_RAW}" 2>/dev/null)
+TARGET_SIZE=$((IMAGE_SIZE_GB * 1024 * 1024 * 1024))
+if [[ "${CURRENT_SIZE}" -lt "${TARGET_SIZE}" ]]; then
+  echo "[build] Expanding image to ${IMAGE_SIZE_GB} GB..."
+  truncate -s "${IMAGE_SIZE_GB}G" "${ARMBIAN_IMAGE_RAW}"
+fi
+
 # --- 3. Монтировать корневой раздел (второй раздел у Armbian) ---
 mkdir -p "${ROOTFS}"
 LOOP=""
 LOOP_APT=""
-APT_CACHE_GB="${APT_CACHE_GB:-2}"
 cleanup_mount() {
   if [[ -d "${ROOTFS}" ]]; then
     sudo umount "${ROOTFS}/var/cache/apt/archives" 2>/dev/null || true
@@ -83,13 +94,19 @@ trap cleanup_mount EXIT
 echo "[build] Attaching image (sudo)..."
 LOOP=$(sudo losetup -f --show -P "${ARMBIAN_IMAGE_RAW}")
 ROOT_PART="${LOOP}p2"
-# У некоторых образов корень на p1
+ROOT_PART_NUM=2
 if [[ ! -e "${ROOT_PART}" ]]; then
   ROOT_PART="${LOOP}p1"
+  ROOT_PART_NUM=1
 fi
+# Расширить раздел до конца образа и файловую систему
+echo "[build] Growing partition ${ROOT_PART_NUM} to fill image..."
+sudo growpart "${LOOP}" "${ROOT_PART_NUM}" 2>/dev/null || sudo parted -s "${LOOP}" resizepart "${ROOT_PART_NUM}" 100%
 sudo mount "${ROOT_PART}" "${ROOTFS}"
+echo "[build] Resizing root filesystem to use new space..."
+sudo resize2fs "${ROOT_PART}"
 
-# --- 3b. Больше места под кэш apt в chroot (чтобы не падало "no space") ---
+# --- 3b. Кэш apt в chroot (${APT_CACHE_GB} GB) ---
 APT_CACHE_IMG="${BUILD_DIR}/apt-cache.img"
 if [[ ! -f "${APT_CACHE_IMG}" ]]; then
   echo "[build] Creating ${APT_CACHE_GB} GB volume for apt cache..."
@@ -156,12 +173,15 @@ sudo chroot "${ROOTFS}" /bin/bash -c "export DEBIAN_FRONTEND=noninteractive; /ro
 sudo rm -f "${ROOTFS}/root/provisioning.sh"
 
 # --- 8. Размонтируем ---
+sudo umount "${ROOTFS}/var/cache/apt/archives" 2>/dev/null || true
+[[ -n "${LOOP_APT}" ]] && sudo losetup -d "${LOOP_APT}" 2>/dev/null || true
 for m in run dev proc sys; do
   sudo umount "${ROOTFS}/${m}" 2>/dev/null || true
 done
 sudo umount "${ROOTFS}"
 sudo losetup -d "${LOOP}"
 LOOP=""
+LOOP_APT=""
 trap - EXIT
 
 # --- 9. Копируем готовый образ в корень проекта ---
@@ -169,4 +189,4 @@ echo "[build] Copying final image to ${OUTPUT_IMG}..."
 cp -a "${ARMBIAN_IMAGE_RAW}" "${OUTPUT_IMG}"
 echo "[build] Done. Image size: $(du -h "${OUTPUT_IMG}" | cut -f1)"
 echo "[build] Flash with: sudo dd if=${OUTPUT_IMG} of=/dev/sdX bs=4M status=progress conv=fsync"
-echo "[build] Or use: balena-etcher, Armbian Imager, etc. (target: 16GB card)"
+echo "[build] Or use: balena-etcher, Armbian Imager, etc. (image: ${IMAGE_SIZE_GB} GB)"

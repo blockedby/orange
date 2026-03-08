@@ -28,11 +28,11 @@ sudo pacman -S --noconfirm xz curl qemu-user-static
 - соберёт один файл **`orange-pi-one-ready.img`** в этой папке.
 
 Дальше:
-1. Записать образ на флешку **16 GB**: `sudo dd if=orange-pi-one-ready.img of=/dev/sdX bs=4M status=progress conv=fsync` (или Balena Etcher / Armbian Imager).
+1. Записать образ на флешку (образ **24 GB**): `sudo dd if=orange-pi-one-ready.img of=/dev/sdX bs=4M status=progress conv=fsync` (или Balena Etcher / Armbian Imager).
 2. Вставить флешку в Orange Pi One и включить.
 3. При первом входе Armbian спросит только пароль root и пользователя — **ничего не доставляется**, всё уже внутри образа.
 
-Размер образа после сборки ~3–5 GB — на карту 16 GB влезет, при желании потом можно расширить раздел через `armbian-config` → «Expand filesystem».
+Итоговый образ **24 GB** (корневой раздел расширен при сборке). Кэш apt во время сборки — **4 GB** (чтобы хватало места на установку).
 
 ### SSH и OpenRouter сразу в образе
 
@@ -198,7 +198,7 @@ zeroclaw --version
 ## Краткий чеклист
 
 **Вариант «готовый образ»:**  
-`./build-image.sh` → записать `orange-pi-one-ready.img` на флешку 16 GB → загрузка с Orange Pi — всё уже установлено.
+`./build-image.sh` → записать `orange-pi-one-ready.img` (24 GB) на флешку → загрузка с Orange Pi — всё уже установлено.
 
 **Вариант «ручная подготовка»:**  
 1. Скачать Armbian Minimal под свою Orange Pi.  
