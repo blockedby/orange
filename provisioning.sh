@@ -9,6 +9,18 @@ echo "[provisioning] arch=$ARCH"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y ca-certificates curl wget gnupg
+apt-get upgrade -y
+
+# --- Swap 1 GB (файл в образе, подхватится при загрузке по fstab) ---
+echo "[provisioning] Creating 1 GB swap file..."
+SWAPFILE=/swapfile
+SWAP_MB=1024
+touch "$SWAPFILE"
+chmod 600 "$SWAPFILE"
+dd if=/dev/zero of="$SWAPFILE" bs=1M count=$SWAP_MB status=none
+mkswap "$SWAPFILE"
+echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+swapon "$SWAPFILE" 2>/dev/null || true
 
 # --- Python ---
 echo "[provisioning] Installing Python (pip, venv)..."
@@ -53,6 +65,17 @@ echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
 export PATH=$PATH:/usr/local/go/bin
 go version
 
+# --- Rust (rustup + cargo), системно в /opt ---
+echo "[provisioning] Installing Rust (rustup, cargo)..."
+apt-get install -y build-essential
+export RUSTUP_HOME=/opt/rustup
+export CARGO_HOME=/opt/cargo
+curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable
+echo 'export PATH=$PATH:/opt/cargo/bin' > /etc/profile.d/rust.sh
+export PATH=$PATH:/opt/cargo/bin
+rustc --version
+cargo --version
+
 # --- ZeroClaw (zeroclaw-labs/zeroclaw) — AI assistant runtime ---
 echo "[provisioning] Installing ZeroClaw..."
 case "$ARCH" in
@@ -70,9 +93,63 @@ if [ -n "$ZEROCLAW_ARCH" ]; then
   zeroclaw --version || true
 fi
 
-# --- Опционально: Pico (picotool и зависимости для Pico SDK) ---
-# Раскомментируй, если нужен тулчейн под Raspberry Pi Pico.
-# echo "[provisioning] Installing Pico toolchain deps..."
-# apt-get install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi
+# --- SSH: включаем и при необходимости кладём ключ для root ---
+echo "[provisioning] Configuring SSH..."
+apt-get install -y openssh-server
+systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true
+if [[ -f /root/.ssh_authorized_keys.in ]]; then
+  mkdir -p /root/.ssh
+  mv /root/.ssh_authorized_keys.in /root/.ssh/authorized_keys
+  chmod 700 /root/.ssh
+  chmod 600 /root/.ssh/authorized_keys
+  echo "[provisioning] Root authorized_keys installed (use ssh root@<ip>)"
+  sed -i 's/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config 2>/dev/null || true
+  grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config
+else
+  rm -f /root/.ssh_authorized_keys.in
+fi
+
+# --- ZeroClaw: преконфиг с OpenRouter, если при сборке передан API key (файл .openrouter_key.in) ---
+if [[ -f /root/.openrouter_key.in ]]; then
+  OPENROUTER_API_KEY=$(cat /root/.openrouter_key.in)
+  rm -f /root/.openrouter_key.in
+  echo "[provisioning] Writing ZeroClaw config with OpenRouter..."
+  mkdir -p /root/.zeroclaw
+  cat > /root/.zeroclaw/config.toml << EOF
+# Pre-configured at image build (OPENROUTER_API_KEY)
+default_provider = "openrouter"
+default_model = "openrouter/auto"
+api_key = "${OPENROUTER_API_KEY}"
+
+[memory]
+backend = "sqlite"
+auto_save = true
+embedding_provider = "none"
+vector_weight = 0.7
+keyword_weight = 0.3
+
+[gateway]
+port = 42617
+host = "127.0.0.1"
+require_pairing = true
+allow_public_bind = false
+EOF
+  chmod 600 /root/.zeroclaw/config.toml
+  echo "[provisioning] zeroclaw agent will use OpenRouter out of the box"
+fi
+
+# --- Опционально: два варианта тулчейна (включить при сборке: PROVISION_PICO=1 или PROVISION_NANO=1) ---
+# Pico: Raspberry Pi Pico (RP2040), ARM Cortex-M0+
+# Nano: Arduino Nano и совместимые (AVR 8-bit)
+if [[ -f /root/.provision_pico ]]; then
+  echo "[provisioning] Installing Pico toolchain (RP2040 / Raspberry Pi Pico)..."
+  apt-get install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi
+  rm -f /root/.provision_pico
+fi
+if [[ -f /root/.provision_nano ]]; then
+  echo "[provisioning] Installing Nano toolchain (AVR / Arduino Nano)..."
+  apt-get install -y gcc-avr avrdude
+  rm -f /root/.provision_nano
+fi
 
 echo "[provisioning] Done."
