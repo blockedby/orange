@@ -16,6 +16,8 @@
 # Опционально тулчейн (один или оба): Pico (RP2040) или Nano (AVR/Arduino Nano)
 #   PROVISION_PICO=1 ./build-image.sh
 #   PROVISION_NANO=1 ./build-image.sh
+# Размер кэша apt в chroot (по умолчанию 2 GB, если не хватает места):
+#   APT_CACHE_GB=3 ./build-image.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -63,14 +65,18 @@ test -f "${ARMBIAN_IMAGE_RAW}"
 # --- 3. Монтировать корневой раздел (второй раздел у Armbian) ---
 mkdir -p "${ROOTFS}"
 LOOP=""
+LOOP_APT=""
+APT_CACHE_GB="${APT_CACHE_GB:-2}"
 cleanup_mount() {
   if [[ -d "${ROOTFS}" ]]; then
+    sudo umount "${ROOTFS}/var/cache/apt/archives" 2>/dev/null || true
     for m in dev proc sys run; do
-      umount "${ROOTFS}/${m}" 2>/dev/null || true
+      sudo umount "${ROOTFS}/${m}" 2>/dev/null || true
     done
-    umount "${ROOTFS}" 2>/dev/null || true
+    sudo umount "${ROOTFS}" 2>/dev/null || true
   fi
-  [[ -n "${LOOP}" ]] && losetup -d "${LOOP}" 2>/dev/null || true
+  [[ -n "${LOOP_APT}" ]] && sudo losetup -d "${LOOP_APT}" 2>/dev/null || true
+  [[ -n "${LOOP}" ]] && sudo losetup -d "${LOOP}" 2>/dev/null || true
 }
 trap cleanup_mount EXIT
 
@@ -82,6 +88,18 @@ if [[ ! -e "${ROOT_PART}" ]]; then
   ROOT_PART="${LOOP}p1"
 fi
 sudo mount "${ROOT_PART}" "${ROOTFS}"
+
+# --- 3b. Больше места под кэш apt в chroot (чтобы не падало "no space") ---
+APT_CACHE_IMG="${BUILD_DIR}/apt-cache.img"
+if [[ ! -f "${APT_CACHE_IMG}" ]]; then
+  echo "[build] Creating ${APT_CACHE_GB} GB volume for apt cache..."
+  dd if=/dev/zero of="${APT_CACHE_IMG}" bs=1M count=$((APT_CACHE_GB * 1024)) status=none
+fi
+LOOP_APT=$(sudo losetup -f --show "${APT_CACHE_IMG}")
+sudo mkfs.ext4 -q "${LOOP_APT}"
+sudo mkdir -p "${ROOTFS}/var/cache/apt/archives"
+sudo mount "${LOOP_APT}" "${ROOTFS}/var/cache/apt/archives"
+echo "[build] apt cache mounted: ${APT_CACHE_GB} GB at /var/cache/apt/archives"
 
 # --- 4. QEMU для chroot (хост x86 → гость ARM) ---
 if [[ "$HOST_ARCH" = "x86_64" ]] || [[ "$HOST_ARCH" = "aarch64" ]]; then

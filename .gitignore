@@ -1,4 +1,5 @@
 build/
 *.img
 *.img.xz
+apt-cache.img
 .env
