@@ -34,6 +34,16 @@ sudo pacman -S --noconfirm xz curl qemu-user-static
 
 Итоговый образ **24 GB** (корневой раздел расширен при сборке). Кэш apt во время сборки — **4 GB** (чтобы хватало места на установку).
 
+**Очистка артефактов (если на хосте закончилось место):** размонтировать и удалить `build/`, при необходимости удалить готовый образ:
+```bash
+sudo umount -l build/rootfs/var/cache/apt/archives 2>/dev/null
+sudo umount -l build/rootfs 2>/dev/null
+sudo losetup -D
+rm -rf build/
+rm -f orange-pi-one-ready.img
+```
+Или запустить `./clean-build.sh` (см. скрипт в репозитории).
+
 ### SSH и OpenRouter сразу в образе
 
 При сборке можно передать ключи — они попадут в образ, и после загрузки ничего доп. настраивать не нужно.
