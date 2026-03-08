@@ -203,6 +203,11 @@ trap - EXIT
 # --- 9. Копируем готовый образ в корень проекта ---
 echo "[build] Copying final image to ${OUTPUT_IMG}..."
 cp -a "${ARMBIAN_IMAGE_RAW}" "${OUTPUT_IMG}"
+# Чтобы образ и build/ были у того, кто запустил sudo, а не у root
+if [[ -n "${SUDO_UID:-}" ]] && [[ -n "${SUDO_GID:-}" ]]; then
+  sudo chown -R "${SUDO_UID}:${SUDO_GID}" "${OUTPUT_IMG}" "${BUILD_DIR}"
+  echo "[build] chown ${SUDO_USER:-$SUDO_UID}:${SUDO_GID} on output and build/"
+fi
 echo "[build] Done. Image size: $(du -h "${OUTPUT_IMG}" | cut -f1)"
 echo "[build] Flash with: sudo dd if=${OUTPUT_IMG} of=/dev/sdX bs=4M status=progress conv=fsync"
 echo "[build] Or use: balena-etcher, Armbian Imager, etc. (image: ${IMAGE_SIZE_GB} GB)"
