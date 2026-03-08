@@ -68,12 +68,20 @@ go version
 # --- Rust (rustup + cargo), системно в /opt ---
 echo "[provisioning] Installing Rust (rustup, cargo)..."
 apt-get install -y build-essential
+# Чистая установка каждый раз (избегаем I/O при "update existing" в chroot/QEMU)
+rm -rf /opt/rustup /opt/cargo
 export RUSTUP_HOME=/opt/rustup
 export CARGO_HOME=/opt/cargo
-curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable
-# PATH для всех: при логине (SSH/консоль) подхватывается из /etc/profile.d/rust.sh
-echo 'export PATH="$PATH:/opt/cargo/bin"' > /etc/profile.d/rust.sh
-export PATH="$PATH:/opt/cargo/bin"
+mkdir -p /opt/rustup /opt/cargo
+if ! curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable; then
+  echo "[provisioning] rustup failed (e.g. I/O in chroot), falling back to apt rustc/cargo..."
+  apt-get install -y rustc cargo
+  echo 'export PATH="$PATH:/usr/bin"' > /etc/profile.d/rust.sh
+  export PATH="$PATH:/usr/bin"
+else
+  echo 'export PATH="$PATH:/opt/cargo/bin"' > /etc/profile.d/rust.sh
+  export PATH="$PATH:/opt/cargo/bin"
+fi
 rustc --version
 cargo --version
 
