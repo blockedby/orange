@@ -8,7 +8,7 @@ echo "[provisioning] arch=$ARCH"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl wget gnupg git net-tools make xz-utils
+apt-get install -y ca-certificates curl wget gnupg git net-tools make xz-utils libatomic1
 apt-get upgrade -y
 
 # --- Swap 1 GB (файл в образе, подхватится при загрузке по fstab) ---
