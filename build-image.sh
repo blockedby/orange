@@ -27,6 +27,14 @@ OUTPUT_IMG="${SCRIPT_DIR}/orange-pi-one-ready.img"
 IMAGE_SIZE_GB="${IMAGE_SIZE_GB:-24}"
 APT_CACHE_GB="${APT_CACHE_GB:-4}"
 
+# Подхватить переменные из .env (если есть)
+if [[ -f "${SCRIPT_DIR}/.env" ]]; then
+  set -a
+  source "${SCRIPT_DIR}/.env"
+  set +a
+  echo "[build] Loaded .env"
+fi
+
 # Прямая ссылка на minimal (Ubuntu 24.04 Noble) для Orange Pi One
 ARMBIAN_IMAGE_URL="${ARMBIAN_IMAGE_URL:-https://archive.armbian.com/orangepione/archive/Armbian_25.11.1_Orangepione_noble_current_6.12.58_minimal.img.xz}"
 ARMBIAN_IMAGE_XZ="${BUILD_DIR}/armbian.img.xz"
@@ -140,6 +148,11 @@ fi
 sudo cp -a "${SCRIPT_DIR}/provisioning.sh" "${ROOTFS}/root/provisioning.sh"
 sudo chmod +x "${ROOTFS}/root/provisioning.sh"
 echo "nameserver 8.8.8.8" | sudo tee "${ROOTFS}/etc/resolv.conf" >/dev/null
+# firstboot.conf → /root/.not_logged_in_yet (пароль, пользователь, локаль при первом запуске)
+if [[ -f "${SCRIPT_DIR}/firstboot.conf" ]]; then
+  sudo cp -a "${SCRIPT_DIR}/firstboot.conf" "${ROOTFS}/root/.not_logged_in_yet"
+  echo "[build] firstboot.conf → /root/.not_logged_in_yet"
+fi
 # Ключи передаём через файлы (безопасно для спецсимволов), provisioning прочитает и удалит
 if [[ -n "${ROOT_SSH_AUTHORIZED_KEYS:-}" ]]; then
   echo "${ROOT_SSH_AUTHORIZED_KEYS}" | sudo tee "${ROOTFS}/root/.ssh_authorized_keys.in" >/dev/null

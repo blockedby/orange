@@ -62,6 +62,8 @@ export OPENROUTER_MODEL="anthropic/claude-sonnet-4"   # опционально, 
 Или в одну строку:  
 `ROOT_SSH_AUTHORIZED_KEYS="$(cat ~/.ssh/id_ed25519.pub)" OPENROUTER_API_KEY="sk-or-..." OPENROUTER_MODEL="openai/gpt-4o-mini" ./build-image.sh`
 
+**Через файлы (удобно, не светятся в истории):** скопируй `.env.example` в `.env` и заполни переменные — скрипт при запуске подхватит их сам. Файл `firstboot.conf` (по образцу `firstboot.conf.example`) при сборке попадёт в образ как `/root/.not_logged_in_yet` (пароль root, пользователь, локаль при первом запуске). Файлы `.env` и `firstboot.conf` в `.gitignore` — в репозиторий не попадут.
+
 Ключи в образ попадают только в нужные файлы (authorized_keys и config.toml), в лог сборки не выводятся.
 
 **Опционально тулчейны (два варианта, можно попробовать какой лучше):**

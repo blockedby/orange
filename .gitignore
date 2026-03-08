@@ -3,3 +3,4 @@ build/
 *.img.xz
 apt-cache.img
 .env
+firstboot.conf
