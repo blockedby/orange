@@ -178,7 +178,10 @@ sudo umount "${ROOTFS}/var/cache/apt/archives" 2>/dev/null || true
 for m in run dev proc sys; do
   sudo umount "${ROOTFS}/${m}" 2>/dev/null || true
 done
-sudo umount "${ROOTFS}"
+if ! sudo umount "${ROOTFS}" 2>/dev/null; then
+  echo "[build] rootfs busy, trying lazy umount..."
+  sudo umount -l "${ROOTFS}"
+fi
 sudo losetup -d "${LOOP}"
 LOOP=""
 LOOP_APT=""

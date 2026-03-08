@@ -71,8 +71,9 @@ apt-get install -y build-essential
 export RUSTUP_HOME=/opt/rustup
 export CARGO_HOME=/opt/cargo
 curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable
-echo 'export PATH=$PATH:/opt/cargo/bin' > /etc/profile.d/rust.sh
-export PATH=$PATH:/opt/cargo/bin
+# PATH для всех: при логине (SSH/консоль) подхватывается из /etc/profile.d/rust.sh
+echo 'export PATH="$PATH:/opt/cargo/bin"' > /etc/profile.d/rust.sh
+export PATH="$PATH:/opt/cargo/bin"
 rustc --version
 cargo --version
 
