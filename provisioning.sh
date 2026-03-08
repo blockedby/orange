@@ -8,7 +8,7 @@ echo "[provisioning] arch=$ARCH"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl wget gnupg
+apt-get install -y ca-certificates curl wget gnupg git net-tools make
 apt-get upgrade -y
 
 # --- Swap 1 GB (файл в образе, подхватится при загрузке по fstab) ---
@@ -113,12 +113,14 @@ fi
 if [[ -f /root/.openrouter_key.in ]]; then
   OPENROUTER_API_KEY=$(cat /root/.openrouter_key.in)
   rm -f /root/.openrouter_key.in
-  echo "[provisioning] Writing ZeroClaw config with OpenRouter..."
+  OPENROUTER_MODEL="openrouter/auto"
+  [[ -f /root/.openrouter_model.in ]] && OPENROUTER_MODEL=$(cat /root/.openrouter_model.in) && rm -f /root/.openrouter_model.in
+  echo "[provisioning] Writing ZeroClaw config with OpenRouter (model: ${OPENROUTER_MODEL})..."
   mkdir -p /root/.zeroclaw
   cat > /root/.zeroclaw/config.toml << EOF
-# Pre-configured at image build (OPENROUTER_API_KEY)
+# Pre-configured at image build (OPENROUTER_API_KEY, OPENROUTER_MODEL)
 default_provider = "openrouter"
-default_model = "openrouter/auto"
+default_model = "${OPENROUTER_MODEL}"
 api_key = "${OPENROUTER_API_KEY}"
 
 [memory]

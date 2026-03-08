@@ -11,6 +11,7 @@
 # Опционально (ключи попадут в образ, в лог не пишутся):
 #   ROOT_SSH_AUTHORIZED_KEYS="$(cat ~/.ssh/id_ed25519.pub)" \
 #   OPENROUTER_API_KEY="sk-or-v1-..." \
+#   OPENROUTER_MODEL="anthropic/claude-sonnet-4" \
 #   ./build-image.sh
 # Опционально тулчейн (один или оба): Pico (RP2040) или Nano (AVR/Arduino Nano)
 #   PROVISION_PICO=1 ./build-image.sh
@@ -114,6 +115,10 @@ if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
   echo "${OPENROUTER_API_KEY}" | sudo tee "${ROOTFS}/root/.openrouter_key.in" >/dev/null
   sudo chmod 600 "${ROOTFS}/root/.openrouter_key.in"
   echo "[build] OPENROUTER_API_KEY → will be written to ZeroClaw config"
+fi
+if [[ -n "${OPENROUTER_MODEL:-}" ]]; then
+  echo "${OPENROUTER_MODEL}" | sudo tee "${ROOTFS}/root/.openrouter_model.in" >/dev/null
+  echo "[build] OPENROUTER_MODEL=${OPENROUTER_MODEL} → default_model in ZeroClaw config"
 fi
 # Опционально: тулчейн Pico (RP2040) или Nano (AVR) — какой лучше подберёшь по ходу
 [[ -n "${PROVISION_PICO:-}" ]] && sudo touch "${ROOTFS}/root/.provision_pico" && echo "[build] PROVISION_PICO=1 → will install Pico (RP2040) toolchain"

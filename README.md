@@ -48,17 +48,19 @@ sudo pacman -S --noconfirm xz curl qemu-user-static
 #### OpenRouter (ZeroClaw)
 
 - Если при сборке задать **OPENROUTER_API_KEY**, в образе создаётся `/root/.zeroclaw/config.toml` с `default_provider = "openrouter"`. После загрузки можно сразу запускать `zeroclaw agent`.
+- **Модель по умолчанию:** задай **OPENROUTER_MODEL** — подставится в `default_model` (иначе будет `openrouter/auto`). Примеры: `anthropic/claude-sonnet-4`, `openai/gpt-4o-mini`, `google/gemini-2.0-flash-001`.
 
 Пример (одной строкой или экспортами):
 
 ```bash
 export ROOT_SSH_AUTHORIZED_KEYS="$(cat ~/.ssh/id_ed25519.pub)"
 export OPENROUTER_API_KEY="sk-or-v1-..."
+export OPENROUTER_MODEL="anthropic/claude-sonnet-4"   # опционально, по умолчанию openrouter/auto
 ./build-image.sh
 ```
 
 Или в одну строку:  
-`ROOT_SSH_AUTHORIZED_KEYS="$(cat ~/.ssh/id_ed25519.pub)" OPENROUTER_API_KEY="sk-or-..." ./build-image.sh`
+`ROOT_SSH_AUTHORIZED_KEYS="$(cat ~/.ssh/id_ed25519.pub)" OPENROUTER_API_KEY="sk-or-..." OPENROUTER_MODEL="openai/gpt-4o-mini" ./build-image.sh`
 
 Ключи в образ попадают только в нужные файлы (authorized_keys и config.toml), в лог сборки не выводятся.
 
