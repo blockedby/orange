@@ -1,0 +1,21 @@
+# Пример конфига первого запуска Armbian.
+# Сохрани как /root/.not_logged_in_yet на смонтированном разделе образа (второй раздел флешки).
+
+# Пароль root (или оставь пустым — спросит при загрузке)
+PRESET_ROOT_PASSWORD="changeme"
+
+# Пользователь по умолчанию
+PRESET_USER_NAME="orangepi"
+PRESET_USER_PASSWORD="changeme"
+PRESET_USER_SHELL="bash"
+
+# Локаль и время
+PRESET_LOCALE="ru_RU.UTF-8"
+PRESET_TIMEZONE="Europe/Moscow"
+
+# Сеть — раскомментируй и заполни при необходимости
+# PRESET_NET_CHANGE_DEFAULTS="1"
+# PRESET_NET_WIFI_ENABLED="1"
+# PRESET_NET_WIFI_SSID="MyWiFi"
+# PRESET_NET_WIFI_KEY="password"
+# PRESET_NET_WIFI_COUNTRYCODE="RU"
