@@ -16,7 +16,8 @@
 # Опционально тулчейн (один или оба): Pico (RP2040) или Nano (AVR/Arduino Nano)
 #   PROVISION_PICO=1 ./build-image.sh
 #   PROVISION_NANO=1 ./build-image.sh
-# Итоговый образ 24 GB, кэш apt при сборке 4 GB (переопределить: IMAGE_SIZE_GB=24 APT_CACHE_GB=4)
+# По умолчанию: компактный профиль (8 GB, кэш apt 2 GB).
+# Переопределение: IMAGE_SIZE_GB=12 APT_CACHE_GB=3 BUILD_PROFILE=full RUN_APT_UPGRADE=1 ./build-image.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -24,8 +25,17 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 ROOTFS="${BUILD_DIR}/rootfs"
 OUTPUT_IMG="${SCRIPT_DIR}/orange-pi-one-ready.img"
 
-IMAGE_SIZE_GB="${IMAGE_SIZE_GB:-24}"
-APT_CACHE_GB="${APT_CACHE_GB:-4}"
+BUILD_PROFILE="${BUILD_PROFILE:-minimal}"
+
+if [[ "${BUILD_PROFILE}" == "minimal" ]]; then
+  IMAGE_SIZE_GB="${IMAGE_SIZE_GB:-8}"
+  APT_CACHE_GB="${APT_CACHE_GB:-2}"
+  RUN_APT_UPGRADE="${RUN_APT_UPGRADE:-0}"
+else
+  IMAGE_SIZE_GB="${IMAGE_SIZE_GB:-24}"
+  APT_CACHE_GB="${APT_CACHE_GB:-4}"
+  RUN_APT_UPGRADE="${RUN_APT_UPGRADE:-1}"
+fi
 
 # Подхватить переменные из .env (если есть)
 if [[ -f "${SCRIPT_DIR}/.env" ]]; then
@@ -35,13 +45,14 @@ if [[ -f "${SCRIPT_DIR}/.env" ]]; then
   echo "[build] Loaded .env"
 fi
 
-# Прямая ссылка на minimal (Ubuntu 24.04 Noble) для Orange Pi One
-ARMBIAN_IMAGE_URL="${ARMBIAN_IMAGE_URL:-https://archive.armbian.com/orangepione/archive/Armbian_25.11.1_Orangepione_noble_current_6.12.58_minimal.img.xz}"
-ARMBIAN_IMAGE_XZ="${BUILD_DIR}/armbian.img.xz"
+# Рабочая ссылка на образ (можно/нужно переопределять через .env при истечении токена)
+ARMBIAN_IMAGE_URL="${ARMBIAN_IMAGE_URL:-https://drive.usercontent.google.com/download?id=1qh6CHMCaPRnc4t62QG-ndzBoQxDE3vos&export=download&authuser=0&confirm=t&uuid=239b4b1d-0bb0-4b21-b7e1-ef8916e8322c&at=AGN2oQ1HI4SMGZ_6_tponiE8EvmG:1774362128800}"
+ARMBIAN_IMAGE_ARCHIVE="${BUILD_DIR}/armbian.source"
 ARMBIAN_IMAGE_RAW="${BUILD_DIR}/armbian.img"
 
 echo "[build] Output image: ${OUTPUT_IMG}"
 echo "[build] Armbian source: ${ARMBIAN_IMAGE_URL}"
+echo "[build] Profile: ${BUILD_PROFILE} (IMAGE_SIZE_GB=${IMAGE_SIZE_GB}, APT_CACHE_GB=${APT_CACHE_GB}, RUN_APT_UPGRADE=${RUN_APT_UPGRADE})"
 HOST_ARCH=$(uname -m)
 echo "[build] Host: ${HOST_ARCH} → target: ARM (Orange Pi One); will use qemu-arm-static in chroot"
 
@@ -50,7 +61,7 @@ require_cmd() {
     command -v "$c" &>/dev/null || { echo "Need: $c"; exit 1; }
   done
 }
-require_cmd curl xz mount umount losetup truncate resize2fs
+require_cmd curl xz gzip tar mount umount losetup truncate resize2fs
 # growpart (cloud-guest-utils) или parted для расширения раздела
 command -v growpart &>/dev/null || command -v parted &>/dev/null || { echo "Need: growpart or parted"; exit 1; }
 if ! sudo -n true 2>/dev/null; then
@@ -60,17 +71,40 @@ fi
 
 # --- 1. Скачать образ ---
 mkdir -p "${BUILD_DIR}"
-if [[ ! -f "${ARMBIAN_IMAGE_XZ}" ]]; then
+if [[ ! -f "${ARMBIAN_IMAGE_ARCHIVE}" ]]; then
   echo "[build] Downloading Armbian image..."
-  curl -fSL -o "${ARMBIAN_IMAGE_XZ}" "${ARMBIAN_IMAGE_URL}"
+  curl -fSL -o "${ARMBIAN_IMAGE_ARCHIVE}" "${ARMBIAN_IMAGE_URL}"
 else
-  echo "[build] Using cached ${ARMBIAN_IMAGE_XZ}"
+  echo "[build] Using cached ${ARMBIAN_IMAGE_ARCHIVE}"
 fi
+echo "[build] Source archive saved as: ${ARMBIAN_IMAGE_ARCHIVE}"
 
 # --- 2. Распаковать ---
 if [[ ! -f "${ARMBIAN_IMAGE_RAW}" ]]; then
-  echo "[build] Decompressing..."
-  (cd "${BUILD_DIR}" && xz -dk -f armbian.img.xz 2>/dev/null || xz -d -k -f armbian.img.xz)
+  echo "[build] Preparing raw image from downloaded source..."
+  if xz -t "${ARMBIAN_IMAGE_ARCHIVE}" >/dev/null 2>&1; then
+    echo "[build] Detected format: xz-compressed image"
+    cp -f "${ARMBIAN_IMAGE_ARCHIVE}" "${BUILD_DIR}/armbian.img.xz"
+    (cd "${BUILD_DIR}" && xz -dk -f armbian.img.xz 2>/dev/null || xz -d -k -f armbian.img.xz)
+  elif gzip -t "${ARMBIAN_IMAGE_ARCHIVE}" >/dev/null 2>&1; then
+    if tar -tzf "${ARMBIAN_IMAGE_ARCHIVE}" >/dev/null 2>&1; then
+      echo "[build] Detected format: tar.gz archive"
+      tar -xzf "${ARMBIAN_IMAGE_ARCHIVE}" -C "${BUILD_DIR}"
+      IMG_FROM_TAR="$(ls "${BUILD_DIR}"/*.img 2>/dev/null | head -n 1 || true)"
+      if [[ -z "${IMG_FROM_TAR}" ]]; then
+        echo "[build] ERROR: tar.gz does not contain .img file"
+        exit 1
+      fi
+      cp -f "${IMG_FROM_TAR}" "${ARMBIAN_IMAGE_RAW}"
+    else
+      echo "[build] Detected format: gzip-compressed image"
+      cp -f "${ARMBIAN_IMAGE_ARCHIVE}" "${BUILD_DIR}/armbian.img.gz"
+      gzip -df "${BUILD_DIR}/armbian.img.gz"
+    fi
+  else
+    echo "[build] Detected format: raw image (no compression)"
+    cp -f "${ARMBIAN_IMAGE_ARCHIVE}" "${ARMBIAN_IMAGE_RAW}"
+  fi
 fi
 test -f "${ARMBIAN_IMAGE_RAW}"
 
@@ -180,7 +214,7 @@ fi
 
 # --- 6. Запуск установки внутри образа (это займёт время) ---
 echo "[build] Running provisioning inside image (Python, Node, Go, ZeroClaw, SSH, ZeroClaw config)..."
-sudo chroot "${ROOTFS}" /bin/bash -c "export DEBIAN_FRONTEND=noninteractive; /root/provisioning.sh"
+sudo chroot "${ROOTFS}" /bin/bash -c "export DEBIAN_FRONTEND=noninteractive RUN_APT_UPGRADE='${RUN_APT_UPGRADE}'; /root/provisioning.sh"
 
 # --- 7. Убираем скрипт, чтобы Armbian не запустил его снова при первом входе ---
 sudo rm -f "${ROOTFS}/root/provisioning.sh"

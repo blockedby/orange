@@ -23,18 +23,26 @@ sudo pacman -S --noconfirm xz curl qemu-user-static
 ```
 
 Скрипт **сам**:
-- скачает образ Armbian Minimal для Orange Pi One (Ubuntu 24.04);
+- скачает рабочий базовый образ (URL берётся из `ARMBIAN_IMAGE_URL`, можно задать в `.env`);
 - распакует, смонтирует, в chroot поставит Python, Node, Go, ZeroClaw;
 - соберёт один файл **`orange-pi-one-ready.img`** в этой папке.
 
 Дальше:
-1. Записать образ на флешку (образ **24 GB**): `sudo dd if=orange-pi-one-ready.img of=/dev/sdX bs=4M status=progress conv=fsync` (или Balena Etcher / Armbian Imager).
+1. Записать образ на флешку (в профиле `minimal` образ **8 GB**): `sudo dd if=orange-pi-one-ready.img of=/dev/sdX bs=4M status=progress conv=fsync` (или Balena Etcher / Armbian Imager).
 2. Вставить флешку в Orange Pi One и включить.
 3. При первом входе Armbian спросит только пароль root и пользователя — **ничего не доставляется**, всё уже внутри образа.
 
 **Собрал в виртуалке (Hyper-V и т.п.) — как скачать образ на Windows?** В каталоге проекта есть простой HTTP-файлообменник на Go. В Ubuntu: `go run fileserver/main.go` (из корня репозитория). Узнай IP виртуалки: `hostname -I`. На Windows открой в браузере `http://IP_ВИРТУАЛКИ:8080` — появится список файлов, по клику на `orange-pi-one-ready.img` начнётся скачивание на хост. Нужен Go: `sudo apt install golang-go`.
 
-Итоговый образ **24 GB** (корневой раздел расширен при сборке). Кэш apt во время сборки — **4 GB** (чтобы хватало места на установку).
+По умолчанию (`BUILD_PROFILE=minimal`) итоговый образ **8 GB**, кэш apt во время сборки — **2 GB**.  
+Для полного профиля (`BUILD_PROFILE=full`) остаются прежние значения: образ **24 GB**, кэш **4 GB**.
+
+### Профили и ключевые переменные
+
+- `BUILD_PROFILE=minimal` (по умолчанию): `IMAGE_SIZE_GB=8`, `APT_CACHE_GB=2`, `RUN_APT_UPGRADE=0`.
+- `BUILD_PROFILE=full`: `IMAGE_SIZE_GB=24`, `APT_CACHE_GB=4`, `RUN_APT_UPGRADE=1`.
+- Любое значение можно переопределить напрямую в `.env` или перед запуском.
+- Источник базового образа задаётся через `ARMBIAN_IMAGE_URL` (важно для ссылок Google Drive с временным токеном).
 
 **Очистка артефактов (если на хосте закончилось место):** размонтировать и удалить `build/`, при необходимости удалить готовый образ:
 ```bash
@@ -212,7 +220,7 @@ zeroclaw --version
 ## Краткий чеклист
 
 **Вариант «готовый образ»:**  
-`./build-image.sh` → записать `orange-pi-one-ready.img` (24 GB) на флешку → загрузка с Orange Pi — всё уже установлено.
+`./build-image.sh` → записать `orange-pi-one-ready.img` (по умолчанию 8 GB) на флешку → загрузка с Orange Pi — всё уже установлено.
 
 **Вариант «ручная подготовка»:**  
 1. Скачать Armbian Minimal под свою Orange Pi.  

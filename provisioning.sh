@@ -9,7 +9,13 @@ echo "[provisioning] arch=$ARCH"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y ca-certificates curl wget gnupg git net-tools make xz-utils libatomic1
-apt-get upgrade -y
+RUN_APT_UPGRADE="${RUN_APT_UPGRADE:-0}"
+if [[ "$RUN_APT_UPGRADE" == "1" ]]; then
+  echo "[provisioning] RUN_APT_UPGRADE=1 -> apt-get upgrade -y"
+  apt-get upgrade -y
+else
+  echo "[provisioning] RUN_APT_UPGRADE=0 -> skip apt-get upgrade"
+fi
 
 # --- Swap 1 GB (файл в образе, подхватится при загрузке по fstab) ---
 echo "[provisioning] Creating 1 GB swap file..."
@@ -162,5 +168,10 @@ if [[ -f /root/.provision_nano ]]; then
   apt-get install -y gcc-avr avrdude
   rm -f /root/.provision_nano
 fi
+
+# --- Cleanup, чтобы не раздувать итоговый образ ---
+echo "[provisioning] Cleaning apt caches and temp files..."
+apt-get clean
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 echo "[provisioning] Done."
